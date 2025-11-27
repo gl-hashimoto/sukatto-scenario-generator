@@ -9,8 +9,22 @@ import traceback
 from dotenv import load_dotenv, set_key
 
 # バージョン情報
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 PROMPT_VERSION = "3.0"
+
+# Streamlit Cloud環境かどうかを検出
+def is_streamlit_cloud():
+    """Streamlit Cloud環境かどうかを検出"""
+    try:
+        # Streamlit Cloudでは st.secrets が利用可能
+        if hasattr(st, 'secrets') and len(st.secrets) > 0:
+            return True
+        # 環境変数でも判定（Streamlit Cloudは特定の環境変数を設定）
+        if os.getenv("STREAMLIT_SHARING_MODE") or os.getenv("IS_STREAMLIT_CLOUD"):
+            return True
+    except Exception:
+        pass
+    return False
 
 # ============================================================================
 # 文字数カウント関数
@@ -324,69 +338,98 @@ def generate_scenario(api_key, experience):
 
 # 履歴を保存
 def save_history(experience, result):
-    history_dir = os.path.join(os.path.dirname(__file__), "output")
-    os.makedirs(history_dir, exist_ok=True)
+    # Streamlit Cloud環境ではファイル保存をスキップ
+    if is_streamlit_cloud():
+        return None
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"scenario_{timestamp}.json"
-    filepath = os.path.join(history_dir, filename)
+    try:
+        history_dir = os.path.join(os.path.dirname(__file__), "output")
+        os.makedirs(history_dir, exist_ok=True)
 
-    data = {
-        "timestamp": datetime.now().isoformat(),
-        "experience": experience,
-        "prompt_version": PROMPT_VERSION,
-        "result": result
-    }
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"scenario_{timestamp}.json"
+        filepath = os.path.join(history_dir, filename)
 
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        data = {
+            "timestamp": datetime.now().isoformat(),
+            "experience": experience,
+            "prompt_version": PROMPT_VERSION,
+            "result": result
+        }
 
-    return filepath
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        return filepath
+    except Exception:
+        return None
 
 # 履歴を読み込む
 def load_history(limit=10, search_query=""):
-    history_dir = os.path.join(os.path.dirname(__file__), "output")
-    if not os.path.exists(history_dir):
+    # Streamlit Cloud環境ではファイル読み込みをスキップ
+    if is_streamlit_cloud():
         return []
 
-    history_files = sorted(
-        [f for f in os.listdir(history_dir) if f.endswith('.json')],
-        reverse=True
-    )
+    try:
+        history_dir = os.path.join(os.path.dirname(__file__), "output")
+        if not os.path.exists(history_dir):
+            return []
 
-    histories = []
-    for filename in history_files:
-        filepath = os.path.join(history_dir, filename)
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            # 検索クエリがある場合、フィルタリング
-            if search_query:
-                if (search_query.lower() in data.get('experience', '').lower() or
-                    search_query.lower() in data.get('result', '').lower()):
+        history_files = sorted(
+            [f for f in os.listdir(history_dir) if f.endswith('.json') and f != 'favorites.json'],
+            reverse=True
+        )
+
+        histories = []
+        for filename in history_files:
+            filepath = os.path.join(history_dir, filename)
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                # 検索クエリがある場合、フィルタリング
+                if search_query:
+                    if (search_query.lower() in data.get('experience', '').lower() or
+                        search_query.lower() in data.get('result', '').lower()):
+                        histories.append(data)
+                else:
                     histories.append(data)
-            else:
-                histories.append(data)
-        
-        # 制限数に達したら終了
-        if len(histories) >= limit:
-            break
 
-    return histories
+            # 制限数に達したら終了
+            if len(histories) >= limit:
+                break
+
+        return histories
+    except Exception:
+        return []
 
 # お気に入り管理
 def get_favorites():
     """お気に入りリストを取得"""
-    favorites_file = os.path.join(os.path.dirname(__file__), "output", "favorites.json")
-    if os.path.exists(favorites_file):
-        with open(favorites_file, "r", encoding="utf-8") as f:
-            return json.load(f)
+    # Streamlit Cloud環境ではファイル操作をスキップ
+    if is_streamlit_cloud():
+        return []
+
+    try:
+        favorites_file = os.path.join(os.path.dirname(__file__), "output", "favorites.json")
+        if os.path.exists(favorites_file):
+            with open(favorites_file, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
     return []
 
 def save_favorites(favorites):
     """お気に入りリストを保存"""
-    favorites_file = os.path.join(os.path.dirname(__file__), "output", "favorites.json")
-    with open(favorites_file, "w", encoding="utf-8") as f:
-        json.dump(favorites, f, ensure_ascii=False, indent=2)
+    # Streamlit Cloud環境ではファイル操作をスキップ
+    if is_streamlit_cloud():
+        return
+
+    try:
+        favorites_file = os.path.join(os.path.dirname(__file__), "output", "favorites.json")
+        os.makedirs(os.path.dirname(favorites_file), exist_ok=True)
+        with open(favorites_file, "w", encoding="utf-8") as f:
+            json.dump(favorites, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
 def toggle_favorite(timestamp):
     """お気に入りの追加/削除を切り替え"""
@@ -406,61 +449,80 @@ def is_favorite(timestamp):
 # 統計情報を取得
 def get_statistics():
     """生成統計情報を取得"""
-    history_dir = os.path.join(os.path.dirname(__file__), "output")
-    if not os.path.exists(history_dir):
-        return {
-            "total_count": 0
+    # Streamlit Cloud環境ではファイル操作をスキップ
+    if is_streamlit_cloud():
+        return {"total_count": 0}
+
+    try:
+        history_dir = os.path.join(os.path.dirname(__file__), "output")
+        if not os.path.exists(history_dir):
+            return {"total_count": 0}
+
+        history_files = [f for f in os.listdir(history_dir) if f.endswith('.json') and f != 'favorites.json']
+
+        stats = {
+            "total_count": len(history_files)
         }
-    
-    history_files = [f for f in os.listdir(history_dir) if f.endswith('.json')]
-    
-    stats = {
-        "total_count": len(history_files)
-    }
-    
-    return stats
+
+        return stats
+    except Exception:
+        return {"total_count": 0}
 
 # シナリオを編集して保存
 def update_history(timestamp, updated_result):
     """履歴のシナリオを更新"""
-    history_dir = os.path.join(os.path.dirname(__file__), "output")
-    history_files = [f for f in os.listdir(history_dir) if f.endswith('.json')]
-    
-    for filename in history_files:
-        filepath = os.path.join(history_dir, filename)
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if data.get('timestamp', '') == timestamp:
-                data['result'] = updated_result
-                data['updated_at'] = datetime.now().isoformat()
-                data['is_edited'] = True
-                with open(filepath, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                return True
+    # Streamlit Cloud環境ではファイル操作をスキップ
+    if is_streamlit_cloud():
+        return False
+
+    try:
+        history_dir = os.path.join(os.path.dirname(__file__), "output")
+        history_files = [f for f in os.listdir(history_dir) if f.endswith('.json') and f != 'favorites.json']
+
+        for filename in history_files:
+            filepath = os.path.join(history_dir, filename)
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get('timestamp', '') == timestamp:
+                    data['result'] = updated_result
+                    data['updated_at'] = datetime.now().isoformat()
+                    data['is_edited'] = True
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    return True
+    except Exception:
+        pass
     return False
 
 # 履歴を削除
 def delete_history(timestamp):
     """指定されたtimestampの履歴を削除"""
-    history_dir = os.path.join(os.path.dirname(__file__), "output")
-    history_files = [f for f in os.listdir(history_dir) if f.endswith('.json')]
-    
-    for filename in history_files:
-        filepath = os.path.join(history_dir, filename)
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if data.get('timestamp', '') == timestamp:
-                    # お気に入りからも削除
-                    favorites = get_favorites()
-                    if timestamp in favorites:
-                        favorites.remove(timestamp)
-                        save_favorites(favorites)
-                    # ファイルを削除
-                    os.remove(filepath)
-                    return True
-        except Exception as e:
-            continue
+    # Streamlit Cloud環境ではファイル操作をスキップ
+    if is_streamlit_cloud():
+        return False
+
+    try:
+        history_dir = os.path.join(os.path.dirname(__file__), "output")
+        history_files = [f for f in os.listdir(history_dir) if f.endswith('.json') and f != 'favorites.json']
+
+        for filename in history_files:
+            filepath = os.path.join(history_dir, filename)
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if data.get('timestamp', '') == timestamp:
+                        # お気に入りからも削除
+                        favorites = get_favorites()
+                        if timestamp in favorites:
+                            favorites.remove(timestamp)
+                            save_favorites(favorites)
+                        # ファイルを削除
+                        os.remove(filepath)
+                        return True
+            except Exception:
+                continue
+    except Exception:
+        pass
     return False
 
 # APIキーを保存
@@ -468,6 +530,10 @@ def save_api_key(api_key):
     """
     APIキーを.envファイルに保存する
     """
+    # Streamlit Cloud環境ではファイル操作をスキップ
+    if is_streamlit_cloud():
+        return False
+
     env_path = os.path.join(os.path.dirname(__file__), ".env")
 
     try:
