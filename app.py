@@ -484,9 +484,21 @@ def save_api_key(api_key):
         st.error(f"APIキーの保存に失敗しました: {str(e)}")
         return False
 
+# APIキーを取得する関数（Streamlit Cloud対応）
+def get_api_key():
+    """Streamlit CloudのsecretsまたはローカルのAPIキーを取得"""
+    # まずStreamlit Cloudのsecretsを確認
+    try:
+        if "ANTHROPIC_API_KEY" in st.secrets:
+            return st.secrets["ANTHROPIC_API_KEY"]
+    except Exception:
+        pass
+    # ローカル環境の場合は環境変数から
+    return os.getenv("ANTHROPIC_API_KEY", "")
+
 # メイン画面
 def main():
-    # .envファイルを読み込む
+    # .envファイルを読み込む（ローカル環境用）
     load_dotenv()
 
     # ヘッダー
@@ -511,20 +523,27 @@ def main():
         
         st.header("⚙️ 設定")
 
-        # APIキー設定
-        api_key = st.text_input(
-            "Anthropic API Key",
-            type="password",
-            value=os.getenv("ANTHROPIC_API_KEY", ""),
-            help="Claude APIキーを入力してください"
-        )
+        # APIキー設定（Streamlit Cloud対応）
+        default_api_key = get_api_key()
 
-        # APIキー保存ボタン
-        if api_key:
-            if st.button("💾 APIキーを保存", help="APIキーを.envファイルに保存します"):
-                if save_api_key(api_key):
-                    st.success("✅ APIキーを保存しました！")
-                    st.info("次回起動時から自動的に読み込まれます")
+        # Streamlit Cloudの場合はSecretsから自動取得
+        if default_api_key:
+            api_key = default_api_key
+            st.success("✅ APIキー設定済み")
+        else:
+            api_key = st.text_input(
+                "Anthropic API Key",
+                type="password",
+                value="",
+                help="Claude APIキーを入力してください"
+            )
+
+            # APIキー保存ボタン（ローカル環境のみ）
+            if api_key:
+                if st.button("💾 APIキーを保存", help="APIキーを.envファイルに保存します"):
+                    if save_api_key(api_key):
+                        st.success("✅ APIキーを保存しました！")
+                        st.info("次回起動時から自動的に読み込まれます")
 
         st.divider()
 
