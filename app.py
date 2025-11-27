@@ -96,7 +96,7 @@ st.markdown("""
 
 # マスタープロンプトを読み込む
 def load_master_prompt():
-    prompt_path = os.path.join(os.path.dirname(__file__), "prompts", "スカッと系ショート漫画シナリオ生成プロンプト.md")
+    prompt_path = os.path.join(os.path.dirname(__file__), "prompts", "master_prompt.md")
     with open(prompt_path, "r", encoding="utf-8") as f:
         return f.read()
 
