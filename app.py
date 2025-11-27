@@ -15,15 +15,13 @@ PROMPT_VERSION = "3.0"
 # Streamlit Cloud環境かどうかを検出
 def is_streamlit_cloud():
     """Streamlit Cloud環境かどうかを検出"""
-    try:
-        # Streamlit Cloudでは st.secrets が利用可能
-        if hasattr(st, 'secrets') and len(st.secrets) > 0:
-            return True
-        # 環境変数でも判定（Streamlit Cloudは特定の環境変数を設定）
-        if os.getenv("STREAMLIT_SHARING_MODE") or os.getenv("IS_STREAMLIT_CLOUD"):
-            return True
-    except Exception:
-        pass
+    # Streamlit Cloudでは HOME が /home/appuser または /home/adminuser
+    home_dir = os.getenv("HOME", "")
+    if "/home/appuser" in home_dir or "/home/adminuser" in home_dir:
+        return True
+    # 環境変数でも判定
+    if os.getenv("STREAMLIT_SHARING_MODE"):
+        return True
     return False
 
 # ============================================================================
